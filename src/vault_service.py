@@ -20,6 +20,12 @@ def init_vault_db():
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS user_settings (
+            key TEXT PRIMARY KEY,
+            value TEXT
+        )
+    """)
     conn.commit()
     
     # Pre-populate default seed vault records if database is empty
@@ -38,6 +44,26 @@ def init_vault_db():
         conn.commit()
 
     conn.close()
+
+def get_setting(key: str, default: str = "") -> str:
+    """Retrieves a persistent user setting from vault database."""
+    init_vault_db()
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("SELECT value FROM user_settings WHERE key = ?", (key,))
+    row = cursor.fetchone()
+    conn.close()
+    return row[0] if row and row[0] else default
+
+def set_setting(key: str, value: str) -> str:
+    """Saves/updates a persistent user setting in vault database."""
+    init_vault_db()
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("INSERT OR REPLACE INTO user_settings (key, value) VALUES (?, ?)", (key, value))
+    conn.commit()
+    conn.close()
+    return value
 
 def add_vault_entry(category: str, title: str, key_identifier: str, amount: float = 0.0, due_date: str = "N/A", content_text: str = "") -> dict:
     """Adds a new document or financial record entry to the Vault database."""

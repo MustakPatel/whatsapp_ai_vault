@@ -20,3 +20,10 @@ def test_app_webhook_get():
     resp = client.get("/webhook?hub.mode=subscribe&hub.verify_token=WHATSAPP_VAULT_SECRET_VERIFY_TOKEN&hub.challenge=12345")
     assert resp.status_code == 200
     assert resp.data.decode("utf-8") == "12345"
+
+def test_connectgmail_command():
+    client = app.test_client()
+    resp = client.get("/simulate?format=json&message=/connectgmail%20mymail@gmail.com%20abcdefghijklmnop")
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert "GMAIL CONNECTED SUCCESSFULLY" in data["response"]

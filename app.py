@@ -11,8 +11,8 @@ if root_dir not in sys.path:
     sys.path.insert(0, root_dir)
 
 from src.whatsapp_client import send_whatsapp_message, send_whatsapp_quick_buttons
-from src.gmail_service import scan_gmail_for_bank_statements
-from src.vahan_service import get_vehicle_details
+from src.gmail_service import scan_gmail_for_bank_statements, set_gmail_credentials, disconnect_gmail, get_gmail_status
+from src.vahan_service import get_vehicle_details, set_default_vehicle, get_default_vehicle, DEFAULT_VEHICLE_REG
 from src.vault_service import query_vault, init_vault_db
 
 app = Flask(__name__)
@@ -39,7 +39,6 @@ def health():
 @app.route("/simulate", methods=["GET", "POST"])
 def simulate_whatsapp_chat():
     """Simulates WhatsApp AI Assistant chat query via Web Interface / HTTP without requiring Meta Developer login."""
-    # Check if request wants JSON or HTML UI
     is_json = request.is_json or request.headers.get("Accept", "").startswith("application/json") or request.args.get("format") == "json"
 
     if request.method == "POST":
@@ -48,9 +47,10 @@ def simulate_whatsapp_chat():
     else:
         msg_text = request.args.get("message", "")
 
-    # If GET without message parameter, serve beautiful WhatsApp Web Chat UI
     if request.method == "GET" and not msg_text and not is_json:
-        return r"""<!DOCTYPE html>
+        saved_reg = get_default_vehicle()
+        
+        return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -58,68 +58,84 @@ def simulate_whatsapp_chat():
     <title>WhatsApp AI Vault & Executive Assistant</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', sans-serif; }
-        body { background: #0b141a; color: #e9edef; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
-        .header { background: #202c33; padding: 14px 20px; display: flex; align-items: center; gap: 14px; border-bottom: 1px solid #222d34; }
-        .avatar { width: 44px; height: 44px; border-radius: 50%; background: #00a884; display: flex; align-items: center; justify-content: center; font-size: 22px; }
-        .title-area h2 { font-size: 16px; font-weight: 600; color: #e9edef; }
-        .title-area p { font-size: 12px; color: #00a884; font-weight: 500; }
-        .chat-box { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 12px; background: #0b141a; }
-        .msg { max-width: 80%; padding: 12px 16px; border-radius: 12px; font-size: 14.5px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
-        .msg.bot { background: #202c33; align-self: flex-start; border-top-left-radius: 2px; color: #e9edef; }
-        .msg.user { background: #005c4b; align-self: flex-end; border-top-right-radius: 2px; color: #e9edef; }
-        .chips { display: flex; gap: 8px; flex-wrap: wrap; padding: 10px 20px; background: #111b21; border-top: 1px solid #222d34; }
-        .chip { background: #202c33; color: #00a884; border: 1px solid #222d34; padding: 6px 14px; border-radius: 18px; font-size: 13px; cursor: pointer; transition: 0.2s; font-weight: 500; }
-        .chip:hover { background: #00a884; color: #111b21; }
-        .input-area { background: #202c33; padding: 12px 20px; display: flex; gap: 12px; align-items: center; }
-        input { flex: 1; background: #2a3942; border: none; padding: 12px 18px; border-radius: 8px; color: #e9edef; font-size: 15px; outline: none; }
-        button { background: #00a884; color: #111b21; border: none; padding: 12px 24px; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 15px; }
-        button:hover { opacity: 0.9; }
+        * {{ box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', sans-serif; }}
+        body {{ background: #0b141a; color: #e9edef; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }}
+        .header {{ background: #202c33; padding: 14px 20px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #222d34; }}
+        .header-left {{ display: flex; align-items: center; gap: 14px; }}
+        .avatar {{ width: 44px; height: 44px; border-radius: 50%; background: #00a884; display: flex; align-items: center; justify-content: center; font-size: 22px; }}
+        .title-area h2 {{ font-size: 16px; font-weight: 600; color: #e9edef; }}
+        .title-area p {{ font-size: 12px; color: #00a884; font-weight: 500; }}
+        .vehicle-badge {{ background: #111b21; border: 1px solid #00a884; padding: 6px 12px; border-radius: 8px; font-size: 13px; color: #00a884; display: flex; align-items: center; gap: 8px; cursor: pointer; }}
+        .vehicle-badge:hover {{ background: #00a884; color: #111b21; }}
+        .chat-box {{ flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 12px; background: #0b141a; }}
+        .msg {{ max-width: 80%; padding: 12px 16px; border-radius: 12px; font-size: 14.5px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }}
+        .msg.bot {{ background: #202c33; align-self: flex-start; border-top-left-radius: 2px; color: #e9edef; }}
+        .msg.user {{ background: #005c4b; align-self: flex-end; border-top-right-radius: 2px; color: #e9edef; }}
+        .chips {{ display: flex; gap: 8px; flex-wrap: wrap; padding: 10px 20px; background: #111b21; border-top: 1px solid #222d34; }}
+        .chip {{ background: #202c33; color: #00a884; border: 1px solid #222d34; padding: 6px 14px; border-radius: 18px; font-size: 13px; cursor: pointer; transition: 0.2s; font-weight: 500; }}
+        .chip:hover {{ background: #00a884; color: #111b21; }}
+        .input-area {{ background: #202c33; padding: 12px 20px; display: flex; gap: 12px; align-items: center; }}
+        input {{ flex: 1; background: #2a3942; border: none; padding: 12px 18px; border-radius: 8px; color: #e9edef; font-size: 15px; outline: none; }}
+        button {{ background: #00a884; color: #111b21; border: none; padding: 12px 24px; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 15px; }}
+        button:hover {{ opacity: 0.9; }}
     </style>
 </head>
 <body>
     <div class="header">
-        <div class="avatar">🤖</div>
-        <div class="title-area">
-            <h2>WhatsApp AI Assistant & Personal Vault</h2>
-            <p>● Online 24/7 (Zero-Search Vault Active)</p>
+        <div class="header-left">
+            <div class="avatar">🤖</div>
+            <div class="title-area">
+                <h2>WhatsApp AI Assistant & Personal Vault</h2>
+                <p>● Online 24/7 (Zero-Search Vault Active)</p>
+            </div>
+        </div>
+        <div class="vehicle-badge" onclick="promptVehicleReg()">
+            🚗 Saved Vehicle: <b id="regDisplay">{saved_reg}</b> ✏️
         </div>
     </div>
     <div class="chat-box" id="chat">
-        <div class="msg bot">🟢 <b>WHATSAPP AI EXECUTIVE ASSISTANT</b> 🟢\n\n📲 <b>Try these instant live commands:</b>\n• Type <b>bills</b> for Bank Credit Card & Loan EMI Notices\n• Type <b>vehicle MP09XX1234</b> for Parivahan Vehicle Info\n• Ask any query like <b>Mera PAN card number kya hai?</b></div>
+        <div class="msg bot">🟢 <b>WHATSAPP AI EXECUTIVE ASSISTANT</b> 🟢\n\n📲 <b>1-Tap Direct Action Buttons:</b>\n• Tap <b>🚗 My Vehicle Details</b> for instant RC, Insurance & PUCC report for <b>{saved_reg}</b>\n• Tap <b>💳 Bank Bills & Loan EMI</b> for Bank & Loan Notices\n• Tap <b>✏️ Set Saved Vehicle</b> to save your car/bike number once!</div>
     </div>
     <div class="chips">
+        <div class="chip" onclick="sendMsg('my vehicle')">🚗 My Vehicle Details ({saved_reg})</div>
         <div class="chip" onclick="sendMsg('bills')">💳 Bank Bills & Loan EMI</div>
-        <div class="chip" onclick="sendMsg('vehicle MP09XX1234')">🚗 Vehicle RC & Insurance</div>
+        <div class="chip" onclick="promptVehicleReg()">✏️ Set Saved Vehicle</div>
         <div class="chip" onclick="sendMsg('Mera PAN card number kya hai?')">🧠 Search PAN / Aadhaar</div>
     </div>
     <div class="input-area">
-        <input type="text" id="userInput" placeholder="Type a message or command..." onkeypress="if(event.key==='Enter') sendUserMsg()">
+        <input type="text" id="userInput" placeholder="Type a message or /setvehicle MP09XX1234..." onkeypress="if(event.key==='Enter') sendUserMsg()">
         <button onclick="sendUserMsg()">Send</button>
     </div>
     <script>
-        function appendMsg(text, type) {
+        function appendMsg(text, type) {{
             const chat = document.getElementById('chat');
             const div = document.createElement('div');
             div.className = 'msg ' + type;
             div.innerHTML = text.replace(/\\n/g, '<br>').replace(/\*(.*?)\*/g, '<b>$1</b>').replace(/`(.*?)`/g, '<code>$1</code>');
             chat.appendChild(div);
             chat.scrollTop = chat.scrollHeight;
-        }
-        function sendMsg(text) {
+        }}
+        function sendMsg(text) {{
             appendMsg(text, 'user');
             fetch('/simulate?format=json&message=' + encodeURIComponent(text))
                 .then(r => r.json())
                 .then(d => appendMsg(d.response, 'bot'))
                 .catch(e => appendMsg('⚠️ Connection error.', 'bot'));
-        }
-        function sendUserMsg() {
+        }}
+        function sendUserMsg() {{
             const input = document.getElementById('userInput');
-            if (input.value.trim()) {
+            if (input.value.trim()) {{
                 sendMsg(input.value.trim());
                 input.value = '';
-            }
-        }
+            }}
+        }}
+        function promptVehicleReg() {{
+            const reg = prompt("Enter your Vehicle Registration Number (e.g. MP09AB1234):", "{saved_reg}");
+            if (reg && reg.trim()) {{
+                sendMsg('/setvehicle ' + reg.trim());
+                document.getElementById('regDisplay').innerText = reg.trim().toUpperCase();
+            }}
+        }}
     </script>
 </body>
 </html>"""
@@ -128,22 +144,45 @@ def simulate_whatsapp_chat():
     cmd = text_strip.lower()
 
     if cmd in ["hi", "hello", "help", "/start"]:
-        reply = """
+        saved_reg = get_default_vehicle()
+        reply = f"""
 🟢 *WHATSAPP AI EXECUTIVE ASSISTANT & PERSONAL VAULT* 🟢
 
 📲 *Available Commands:*
 • 💳 *Type 'bills' or 'gmail':* Auto-fetch Credit Card bills & Loan EMI notices
-• 🚗 *Type 'vehicle MP09XX1234':* Instant Parivahan Vehicle RC, Insurance & Pollution status
-• 🧠 *Type any question:* Zero-search query (e.g. _'Mera PAN card number kya hai?'_ or _'Axis Bank bill कितना baki hai?'_)
+• 🚗 *Type 'my vehicle' or 'vehicle':* Instant 1-Click Vehicle RC, Insurance & Pollution (Saved: `{saved_reg}`)
+• ⚙️ *Type '/setvehicle MP09XX1234':* Save your primary car/bike number once
+• 📧 *Type '/connectgmail email@gmail.com app_password':* Connect Real Gmail account
+• 🧠 *Type any question:* Zero-search query (e.g. _'Mera PAN card number kya hai?'_)
 """
+    elif any(cmd.startswith(p) for p in ["/connectgmail", "connectgmail", "/connect", "connect gmail", "/gmail"]):
+        parts = text_strip.split()
+        if len(parts) >= 3:
+            pwd = "".join(parts[2:])
+            res = set_gmail_credentials(parts[1], pwd)
+            if res["status"] == "success":
+                reply = f"🎉 *GMAIL CONNECTED SUCCESSFULLY!*\n\nTarget Account: `{parts[1]}`\n\nNow send 'bills' anytime for live statement scanning!"
+            else:
+                reply = f"⚠️ Connection error: {res.get('message')}"
+        else:
+            reply = "⚠️ Usage: `/connectgmail yourname@gmail.com xxxx-xxxx-xxxx-xxxx`"
+    elif cmd.startswith("/setvehicle") or cmd.startswith("set vehicle"):
+        parts = text_strip.split()
+        if len(parts) > 1:
+            new_reg = set_default_vehicle(parts[1])
+            reply = f"✅ *SAVED REGISTERED VEHICLE:* `{new_reg}`\n\nNow simply tap the 🚗 *My Vehicle Details* button anytime to get instant RC, Insurance & Pollution reports without typing vehicle number again!"
+        else:
+            reply = "⚠️ Usage: `/setvehicle MP09XX1234` (Example: `/setvehicle MP09AB1234`)"
     elif cmd in ["bills", "gmail", "emi"]:
         statements = scan_gmail_for_bank_statements()
-        reply = "💳 *LATEST BANK & LOAN STATEMENTS*\n\n"
+        status_info = get_gmail_status()
+        header_tag = f" ({status_info['email']})" if status_info['connected'] else " (Demo Parser - Connect Real Gmail)"
+        reply = f"💳 *LATEST BANK & LOAN STATEMENTS*{header_tag}\n\n"
         for st in statements:
             reply += f"📌 *{st['bank_name']}* ({st['doc_type']})\n💰 Total Due: ₹{st['total_due']:,.2f}\n⏰ Due Date: {st['due_date']}\n\n"
-    elif cmd.startswith("vehicle"):
+    elif cmd.startswith("vehicle") or cmd in ["my vehicle", "car", "bike", "my vehicle details", "my saved vehicle"]:
         parts = text_strip.split()
-        reg_no = parts[1] if len(parts) > 1 else "MP09XX1234"
+        reg_no = parts[1] if len(parts) > 1 and parts[1].lower() not in ["vehicle", "details"] else None
         info = get_vehicle_details(reg_no)
         if info["status"] == "success":
             reply = f"""
@@ -194,6 +233,30 @@ def process_inbound_whatsapp_message(sender_phone: str, text: str):
 • 🧠 *Type any question:* Zero-search query (e.g. _'Mera PAN card number kya hai?'_ or _'Axis Bank bill कितना baki hai?'_)
 """
         send_whatsapp_quick_buttons(sender_phone, msg.strip(), ["Bills & EMI", "Vehicle Info", "Vault Search"])
+        return
+
+    elif any(cmd.startswith(p) for p in ["/connectgmail", "connectgmail", "/connect", "connect gmail", "/gmail"]):
+        parts = text_strip.split()
+        if len(parts) >= 3:
+            pwd = "".join(parts[2:])
+            res = set_gmail_credentials(parts[1], pwd)
+            if res["status"] == "success":
+                msg = f"🎉 *GMAIL CONNECTED SUCCESSFULLY!*\n\nTarget Account: `{parts[1]}`\n\nNow send 'bills' anytime for live statement scanning!"
+            else:
+                msg = f"⚠️ Connection error: {res.get('message')}"
+        else:
+            msg = "⚠️ Usage: `/connectgmail yourname@gmail.com xxxx-xxxx-xxxx-xxxx`"
+        send_whatsapp_message(sender_phone, msg.strip())
+        return
+
+    elif cmd.startswith("/setvehicle") or cmd.startswith("set vehicle"):
+        parts = text_strip.split()
+        if len(parts) > 1:
+            new_reg = set_default_vehicle(parts[1])
+            msg = f"✅ *SAVED REGISTERED VEHICLE:* `{new_reg}`\n\nNow simply tap 'Vehicle Info' anytime for instant RC, Insurance & Pollution reports!"
+        else:
+            msg = "⚠️ Usage: `/setvehicle MP09XX1234`"
+        send_whatsapp_message(sender_phone, msg.strip())
         return
 
     elif cmd in ["bills", "gmail", "emi"]:

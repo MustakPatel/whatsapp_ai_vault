@@ -1,14 +1,33 @@
+import os
 import re
+from src.vault_service import get_setting, set_setting
 
-def get_vehicle_details(registration_no: str) -> dict:
+DEFAULT_VEHICLE_REG = "MP09XX1234"
+
+def get_default_vehicle() -> str:
+    """Returns saved default vehicle registration number from database or fallback."""
+    return get_setting("saved_vehicle_reg", DEFAULT_VEHICLE_REG)
+
+def set_default_vehicle(reg_no: str) -> str:
+    global DEFAULT_VEHICLE_REG
+    clean_reg = re.sub(r'[^A-Za-z0-9]', '', reg_no).upper()
+    if clean_reg:
+        DEFAULT_VEHICLE_REG = clean_reg
+        set_setting("saved_vehicle_reg", clean_reg)
+    return clean_reg if clean_reg else get_default_vehicle()
+
+def get_vehicle_details(registration_no: str = None) -> dict:
     """
     Fetches Vehicle RC, Owner Name, Model, Insurance & Pollution Expiry by Vehicle Registration Number.
-    Simulates Parivahan/Vahan API response with structure.
+    If registration_no is omitted or generic ('my vehicle'), uses saved registered vehicle.
     """
+    saved_reg = get_default_vehicle()
+    if not registration_no or registration_no.lower().strip() in ["my vehicle", "vehicle", "car", "bike", "my vehicle details", "my saved vehicle"]:
+        registration_no = saved_reg
+
     clean_reg = re.sub(r'[^A-Za-z0-9]', '', registration_no).upper()
-    
     if not clean_reg:
-        return {"status": "error", "message": "Invalid Vehicle Registration Number."}
+        clean_reg = saved_reg
 
     # Format simulation response for Parivahan Vehicle Info
     return {
