@@ -35,6 +35,54 @@ def index():
 def health():
     return "OK", 200
 
+@app.route("/simulate", methods=["GET", "POST"])
+def simulate_whatsapp_chat():
+    """Simulates WhatsApp AI Assistant chat query via Web Interface / HTTP without requiring Meta Developer login."""
+    if request.method == "POST":
+        data = request.get_json() or request.form or {}
+        msg_text = data.get("message", data.get("Body", "hi"))
+    else:
+        msg_text = request.args.get("message", "hi")
+        
+    text_strip = msg_text.strip()
+    cmd = text_strip.lower()
+
+    if cmd in ["hi", "hello", "help", "/start"]:
+        reply = """
+🟢 *WHATSAPP AI EXECUTIVE ASSISTANT & PERSONAL VAULT* 🟢
+
+📲 *Available Commands:*
+• 💳 *Type 'bills' or 'gmail':* Auto-fetch Credit Card bills & Loan EMI notices
+• 🚗 *Type 'vehicle MP09XX1234':* Instant Parivahan Vehicle RC, Insurance & Pollution status
+• 🧠 *Type any question:* Zero-search query (e.g. _'Mera PAN card number kya hai?'_ or _'Axis Bank bill कितना baki hai?'_)
+"""
+    elif cmd in ["bills", "gmail", "emi"]:
+        statements = scan_gmail_for_bank_statements()
+        reply = "💳 *LATEST BANK & LOAN STATEMENTS*\n\n"
+        for st in statements:
+            reply += f"📌 *{st['bank_name']}* ({st['doc_type']})\n💰 Total Due: ₹{st['total_due']:,.2f}\n⏰ Due Date: {st['due_date']}\n\n"
+    elif cmd.startswith("vehicle"):
+        parts = text_strip.split()
+        reg_no = parts[1] if len(parts) > 1 else "MP09XX1234"
+        info = get_vehicle_details(reg_no)
+        if info["status"] == "success":
+            reply = f"""
+🚗 *PARIVAHAN VEHICLE DETAILS REPORT* 🚗
+
+📌 *Reg No:* `{info['registration_no']}`
+👤 *Owner Name:* {info['owner_name']}
+🚘 *Model:* {info['maker_model']}
+📅 *Reg Date:* {info['registration_date']}
+🛡️ *Insurance Valid Upto:* {info['insurance_valid_upto']} ({info['insurance_company']})
+🍃 *Pollution (PUCC) Expiry:* {info['pucc_valid_upto']}
+"""
+        else:
+            reply = f"⚠️ Error fetching vehicle details for {reg_no}"
+    else:
+        reply = query_vault(text_strip)
+
+    return jsonify({"status": "success", "message": text_strip, "response": reply.strip()})
+
 @app.route("/webhook", methods=["GET"])
 def webhook_verification():
     """Meta WhatsApp Cloud API Webhook verification challenge handler."""
