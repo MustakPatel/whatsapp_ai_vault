@@ -35,16 +35,96 @@ def index():
 def health():
     return "OK", 200
 
+@app.route("/chat")
 @app.route("/simulate", methods=["GET", "POST"])
 def simulate_whatsapp_chat():
     """Simulates WhatsApp AI Assistant chat query via Web Interface / HTTP without requiring Meta Developer login."""
+    # Check if request wants JSON or HTML UI
+    is_json = request.is_json or request.headers.get("Accept", "").startswith("application/json") or request.args.get("format") == "json"
+
     if request.method == "POST":
         data = request.get_json() or request.form or {}
         msg_text = data.get("message", data.get("Body", "hi"))
     else:
-        msg_text = request.args.get("message", "hi")
-        
-    text_strip = msg_text.strip()
+        msg_text = request.args.get("message", "")
+
+    # If GET without message parameter, serve beautiful WhatsApp Web Chat UI
+    if request.method == "GET" and not msg_text and not is_json:
+        return r"""<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WhatsApp AI Vault & Executive Assistant</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', sans-serif; }
+        body { background: #0b141a; color: #e9edef; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+        .header { background: #202c33; padding: 14px 20px; display: flex; align-items: center; gap: 14px; border-bottom: 1px solid #222d34; }
+        .avatar { width: 44px; height: 44px; border-radius: 50%; background: #00a884; display: flex; align-items: center; justify-content: center; font-size: 22px; }
+        .title-area h2 { font-size: 16px; font-weight: 600; color: #e9edef; }
+        .title-area p { font-size: 12px; color: #00a884; font-weight: 500; }
+        .chat-box { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 12px; background: #0b141a; }
+        .msg { max-width: 80%; padding: 12px 16px; border-radius: 12px; font-size: 14.5px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
+        .msg.bot { background: #202c33; align-self: flex-start; border-top-left-radius: 2px; color: #e9edef; }
+        .msg.user { background: #005c4b; align-self: flex-end; border-top-right-radius: 2px; color: #e9edef; }
+        .chips { display: flex; gap: 8px; flex-wrap: wrap; padding: 10px 20px; background: #111b21; border-top: 1px solid #222d34; }
+        .chip { background: #202c33; color: #00a884; border: 1px solid #222d34; padding: 6px 14px; border-radius: 18px; font-size: 13px; cursor: pointer; transition: 0.2s; font-weight: 500; }
+        .chip:hover { background: #00a884; color: #111b21; }
+        .input-area { background: #202c33; padding: 12px 20px; display: flex; gap: 12px; align-items: center; }
+        input { flex: 1; background: #2a3942; border: none; padding: 12px 18px; border-radius: 8px; color: #e9edef; font-size: 15px; outline: none; }
+        button { background: #00a884; color: #111b21; border: none; padding: 12px 24px; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 15px; }
+        button:hover { opacity: 0.9; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="avatar">🤖</div>
+        <div class="title-area">
+            <h2>WhatsApp AI Assistant & Personal Vault</h2>
+            <p>● Online 24/7 (Zero-Search Vault Active)</p>
+        </div>
+    </div>
+    <div class="chat-box" id="chat">
+        <div class="msg bot">🟢 <b>WHATSAPP AI EXECUTIVE ASSISTANT</b> 🟢\n\n📲 <b>Try these instant live commands:</b>\n• Type <b>bills</b> for Bank Credit Card & Loan EMI Notices\n• Type <b>vehicle MP09XX1234</b> for Parivahan Vehicle Info\n• Ask any query like <b>Mera PAN card number kya hai?</b></div>
+    </div>
+    <div class="chips">
+        <div class="chip" onclick="sendMsg('bills')">💳 Bank Bills & Loan EMI</div>
+        <div class="chip" onclick="sendMsg('vehicle MP09XX1234')">🚗 Vehicle RC & Insurance</div>
+        <div class="chip" onclick="sendMsg('Mera PAN card number kya hai?')">🧠 Search PAN / Aadhaar</div>
+    </div>
+    <div class="input-area">
+        <input type="text" id="userInput" placeholder="Type a message or command..." onkeypress="if(event.key==='Enter') sendUserMsg()">
+        <button onclick="sendUserMsg()">Send</button>
+    </div>
+    <script>
+        function appendMsg(text, type) {
+            const chat = document.getElementById('chat');
+            const div = document.createElement('div');
+            div.className = 'msg ' + type;
+            div.innerHTML = text.replace(/\\n/g, '<br>').replace(/\*(.*?)\*/g, '<b>$1</b>').replace(/`(.*?)`/g, '<code>$1</code>');
+            chat.appendChild(div);
+            chat.scrollTop = chat.scrollHeight;
+        }
+        function sendMsg(text) {
+            appendMsg(text, 'user');
+            fetch('/simulate?format=json&message=' + encodeURIComponent(text))
+                .then(r => r.json())
+                .then(d => appendMsg(d.response, 'bot'))
+                .catch(e => appendMsg('⚠️ Connection error.', 'bot'));
+        }
+        function sendUserMsg() {
+            const input = document.getElementById('userInput');
+            if (input.value.trim()) {
+                sendMsg(input.value.trim());
+                input.value = '';
+            }
+        }
+    </script>
+</body>
+</html>"""
+
+    text_strip = msg_text.strip() if msg_text else "hi"
     cmd = text_strip.lower()
 
     if cmd in ["hi", "hello", "help", "/start"]:
@@ -81,7 +161,9 @@ def simulate_whatsapp_chat():
     else:
         reply = query_vault(text_strip)
 
-    return jsonify({"status": "success", "message": text_strip, "response": reply.strip()})
+    if is_json:
+        return jsonify({"status": "success", "message": text_strip, "response": reply.strip()})
+    return reply.replace('\n', '<br>')
 
 @app.route("/webhook", methods=["GET"])
 def webhook_verification():
